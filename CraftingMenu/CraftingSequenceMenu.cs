@@ -619,7 +619,7 @@ public static class CraftingSequenceMenu
         for (var row = 0; row < 5; row++)
         {
             var isValidAndSelected = itemsInInventory.Any(item => item.PosX == col && item.PosY == row) &&
-                                     Main.Settings.RunOptions.InventoryCraftingSlots[row, col] == 1;
+                Main.Settings.RunOptions.InventoryCraftingSlots[row, col] == 1;
 
             if (!isValidAndSelected)
                 continue;
@@ -632,6 +632,8 @@ public static class CraftingSequenceMenu
 
             newCraftingBase.MethodReadInventoryItem
                 = async token => await InventoryHandler.AsyncTryGetInventoryItemFromSlot(newCraftingBase.CraftingPosition, token);
+
+            var stepIndex = 0;
 
             foreach (var input in Main.Settings.NonUserData.SelectedCraftingStepInputs)
             {
@@ -646,6 +648,8 @@ public static class CraftingSequenceMenu
                     FailureActionStepIndex = input.FailureActionStepIndex,
                     ConditionalCheckGroups = []
                 };
+
+                var condGroupIndex = 1;
 
                 foreach (var conditionGroup in input.ConditionalGroups)
                 {
@@ -664,24 +668,48 @@ public static class CraftingSequenceMenu
 
                     foreach (var checkKey in conditionGroup.Conditionals)
                     {
+                        var checkKeyIndex = 1;
                         var filter = ItemFilter.LoadFromString(checkKey.Value);
-                        if (filter.Queries.Count == 0)
+
+                        if (filter.Queries.Any(x => x.Query.FailedToCompile))
                         {
-                            Logging.Logging.LogMessage($"CraftingSequenceMenu: Failed to load filter from  for string: {checkKey.Name}", LogMessageType.Error);
+                            foreach (var query in filter.Queries.Where(x => x.Query.FailedToCompile))
+                            {
+                                Logging.Logging.LogMessage("CraftingSequenceMenu: Failed to load filter.", LogMessageType.Error);
+                                Logging.Logging.LogMessage($"CraftingSequenceMenu: Step[{stepIndex}].ConditionalGroup[{condGroupIndex}].Check[{checkKeyIndex}] - '{checkKey.Name}'", LogMessageType.Error);
+                                Logging.Logging.LogMessage($"CraftingSequenceMenu: Line #: {query.Query.InitialLine}", LogMessageType.Error);
+                                Logging.Logging.LogMessage($"CraftingSequenceMenu: Error: {query.Query.Error}", LogMessageType.Error);
+                                }
+
                             return;
                         }
 
-                        newGroup.ConditionalChecks.Add(async token =>
+                        if (filter.Queries.Count == 0)
                         {
-                            var resultTuple = await FilterHandler.AsyncIsMatchingCondition(filter, newCraftingBase.CraftingPosition, token);
-                            return resultTuple;
-                        });
+                            Logging.Logging.LogMessage("CraftingSequenceMenu: Failed to load filter, nothing in query.", LogMessageType.Error);
+                            Logging.Logging.LogMessage(
+                                $"CraftingSequenceMenu: Step[{stepIndex}].ConditionalGroup[{condGroupIndex}].Check[{checkKeyIndex}] - '{checkKey.Name}'",
+                                LogMessageType.Error);
+
+                            return;
+                        }
+
+                        newGroup.ConditionalChecks.Add(
+                            async token =>
+                            {
+                                var resultTuple = await FilterHandler.AsyncIsMatchingCondition(filter, newCraftingBase.CraftingPosition, token);
+                                return resultTuple;
+                            });
+
+                        checkKeyIndex++;
                     }
 
                     newStep.ConditionalCheckGroups.Add(newGroup);
+                    condGroupIndex++;
                 }
 
                 newCraftingBase.CraftingSteps.Add(newStep);
+                stepIndex++;
             }
 
             Main.SelectedCraftingSteps.Add(newCraftingBase);
@@ -700,6 +728,8 @@ public static class CraftingSequenceMenu
             MethodReadStashItem = async token => await StashHandler.AsyncTryGetStashSpecialSlot(SpecialSlot.CurrencyTab, token)
         };
 
+        var stepIndex = 1;
+
         foreach (var input in Main.Settings.NonUserData.SelectedCraftingStepInputs)
         {
             var newStep = new CraftingStep
@@ -713,6 +743,8 @@ public static class CraftingSequenceMenu
                 FailureActionStepIndex = input.FailureActionStepIndex,
                 ConditionalCheckGroups = []
             };
+
+            var condGroupIndex = 1;
 
             foreach (var conditionGroup in input.ConditionalGroups)
             {
@@ -731,29 +763,52 @@ public static class CraftingSequenceMenu
 
                 foreach (var checkKey in conditionGroup.Conditionals)
                 {
+                    var checkKeyIndex = 1;
                     var filter = ItemFilter.LoadFromString(checkKey.Value);
+
+                    if (filter.Queries.Any(x => x.Query.FailedToCompile))
+                    {
+                        foreach (var query in filter.Queries.Where(x => x.Query.FailedToCompile))
+                        {
+                            Logging.Logging.LogMessage("CraftingSequenceMenu: Failed to load filter.", LogMessageType.Error);
+                            Logging.Logging.LogMessage($"CraftingSequenceMenu: Step[{stepIndex}].ConditionalGroup[{condGroupIndex}].Check[{checkKeyIndex}] - '{checkKey.Name}'", LogMessageType.Error);
+                            Logging.Logging.LogMessage($"CraftingSequenceMenu: Line #: {query.Query.InitialLine}", LogMessageType.Error);
+                            Logging.Logging.LogMessage($"CraftingSequenceMenu: Error: {query.Query.Error}", LogMessageType.Error);
+                        }
+
+                        return;
+                    }
                     if (filter.Queries.Count == 0)
                     {
-                        Logging.Logging.LogMessage($"CraftingSequenceMenu: Failed to load filter from  for string: {checkKey.Name}", LogMessageType.Error);
+                        Logging.Logging.LogMessage("CraftingSequenceMenu: Failed to load filter, nothing in query.", LogMessageType.Error);
+                        Logging.Logging.LogMessage(
+                            $"CraftingSequenceMenu: Step[{stepIndex}].ConditionalGroup[{condGroupIndex}].Check[{checkKeyIndex}] - '{checkKey.Name}'",
+                            LogMessageType.Error);
+
                         return;
                     }
 
-                    newGroup.ConditionalChecks.Add(async token =>
-                    {
-                        var resultTuple = await FilterHandler.AsyncIsMatchingCondition(filter, SpecialSlot.CurrencyTab, token);
-                        return resultTuple;
-                    });
+                    newGroup.ConditionalChecks.Add(
+                        async token =>
+                        {
+                            var resultTuple = await FilterHandler.AsyncIsMatchingCondition(filter, SpecialSlot.CurrencyTab, token);
+                            return resultTuple;
+                        });
+
+                    checkKeyIndex++;
                 }
 
                 newStep.ConditionalCheckGroups.Add(newGroup);
+                condGroupIndex++;
             }
 
             newCraftingBase.CraftingSteps.Add(newStep);
+            stepIndex++;
         }
 
         Main.SelectedCraftingSteps.Add(newCraftingBase);
-        Logging.Logging.LogMessage($"CraftingSequenceMenu: Currency Tab Item Added with a step count of {newCraftingBase.CraftingSteps.Count}",
-            LogMessageType.Info);
+        Logging.Logging.LogMessage(
+            $"CraftingSequenceMenu: Currency Tab Item Added with a step count of {newCraftingBase.CraftingSteps.Count}", LogMessageType.Info);
     }
 
     private static void DrawInstructions()
